@@ -11,12 +11,26 @@ const io = new Server(httpServer, {
   },
 });
 
-io.on("connection", (socket) => {
-  console.log("a user connected with socket.id = ", socket.id);
-  socket.emit("greet", `welcome socket.id: ${socket.id}`);
+let onlineUser = [];
+let onlineUsersMap = {};
 
-  socket.on("disconnect", (socket) => {
+io.on("connection", (socket) => {
+  // insert newly connected user in the array
+  socket.on("Submit User ID", (userID) => {
+    onlineUsersMap[userID] = {
+      online: true,
+      socketID: socket.id,
+    };
+
+    console.log(onlineUsersMap);
+  });
+
+  socket.on("disconnect", () => {
     console.log(`user with socket.id = ${socket.id} got disconnected!`);
+    io.emit(
+      "a user disconnected",
+      `a user with socket.id = ${socket.id} got disconnected`
+    );
   });
 });
 
