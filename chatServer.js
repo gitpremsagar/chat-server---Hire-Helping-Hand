@@ -20,7 +20,7 @@ async function insertOrUpdateConnectedUserToOnlineUsersTable(userID, socketID) {
       selectStatement,
       selectStatementParams
     );
-    console.log("select result = ", result);
+    // console.log("select result = ", result);
     if (result.length > 0) {
       // update the info by userID
       const updateStatement = `UPDATE online_users 
@@ -35,7 +35,7 @@ async function insertOrUpdateConnectedUserToOnlineUsersTable(userID, socketID) {
         updateStatement,
         updateStatementParams
       );
-      console.log("updated row = ", rows);
+      // console.log("updated row = ", rows);
     } else {
       // insert the info
       const sql = `INSERT INTO online_users (
@@ -49,14 +49,14 @@ async function insertOrUpdateConnectedUserToOnlineUsersTable(userID, socketID) {
       ) VALUES (DEFAULT, ?, ?, ?, NOW(), ?, ?);`;
       const params = [userID, true, "freelancer", socketID, true];
       const [rows] = await makeQueryToDB(sql, params);
-      console.log("insert result = ", rows);
+      // console.log("insert result = ", rows);
     }
   } catch (error) {
     console.log(error);
   }
 }
 
-async function deleteDisconnectedUserFromOnlineUsersTable(socketID) {
+async function updateDisconnectedUserInfoOnOnlineUsersTable(socketID) {
   console.log(`user with socket.id = ${socketID} got disconnected!`);
   // delete the disconnected user from the `online_users` table by socketID
   try {
@@ -67,7 +67,7 @@ async function deleteDisconnectedUserFromOnlineUsersTable(socketID) {
     WHERE socket_id = ? `;
     const params = [null, false, socketID];
     const [rows] = await makeQueryToDB(sql, params);
-    console.log("delete result", rows);
+    // console.log("UPDATE result", rows);
   } catch (error) {
     console.log(error);
   }
@@ -83,8 +83,7 @@ async function sendMessageToRecipientSocketID(incommingMessage) {
       const sql = `SELECT socket_id FROM online_users where user_id = ?`;
       const params = [incommingMessage.senderUserID];
       const [rows] = await makeQueryToDB(sql, params);
-      console.log(rows);
-      // FIXME: multiple duplicate rows having same userID are present in online_users table
+      // console.log(rows);
 
       if (rows.fieldCount === 1) {
         // recipient is online so:
@@ -96,7 +95,7 @@ async function sendMessageToRecipientSocketID(incommingMessage) {
           recipientUserID: incommingMessage.toUserID,
         });
 
-        // 3. TODO: send message to fetched `recipientSocketId` from db
+        // 3. send message to fetched `recipientSocketId` from db
         const outgoingMessage = {
           message: incommingMessage.message,
           senderSocketID: incommingMessage.senderSocketID,
@@ -124,7 +123,21 @@ async function sendMessageToRecipientSocketID(incommingMessage) {
 }
 
 // TODO:
-async function saveMessageInDataBase() {}
+async function saveMessageInDataBase(incommingMessage) {
+  try {
+    const insertStatement =
+      "INSERT INTO `chat_messages` (`sender_id`, `recipient_id`, `message`, `created_at`, `has_seen`) VALUES (?, ?, ?, now(), ?);";
+    const insertStatementParams = [
+      incommingMessage.senderUserID,
+      incommingMessage.toUserID,
+      incommingMessage.message,
+      false,
+    ];
+    const [rows] = await makeQueryToDB(insertStatement, insertStatementParams);
+  } catch (error) {
+    console.log(error);
+  }
+}
 
 io.on("connection", (socket) => {
   // when any newly connected user submits her userID do the following
@@ -134,7 +147,7 @@ io.on("connection", (socket) => {
 
   // whenever somebody gets diconnected then remove her from online_users table
   socket.on("disconnect", async () => {
-    deleteDisconnectedUserFromOnlineUsersTable(socket.id);
+    updateDisconnectedUserInfoOnOnlineUsersTable(socket.id);
 
     // notify all online users that someone having current `socket.id` got disconnected/Offline
     io.emit(
@@ -145,7 +158,7 @@ io.on("connection", (socket) => {
 
   socket.on("send-message", (incommingMessage) => {
     sendMessageToRecipientSocketID(incommingMessage);
-    saveMessageInDataBase();
+    saveMessageInDataBase(incommingMessage);
   });
 });
 
