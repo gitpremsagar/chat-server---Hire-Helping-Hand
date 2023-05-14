@@ -11,32 +11,63 @@ const io = new Server(httpServer, {
   },
 });
 
-async function insertConnectedUserToOnlineUsersTable(userID, socktID) {
+async function insertOrUpdateConnectedUserToOnlineUsersTable(userID, socketID) {
   // insert the connected user into `online_users` table
   try {
-    const sql = `INSERT INTO online_users (
-      user_id,
-      is_online,
-      user_type,
-      last_online,
-      socket_id
-      ) VALUES (?,?,?,NOW(), ?);`;
-    const params = [userID, true, "freelancer", socktID];
-    const [rows] = await makeQueryToDB(sql, params);
-    console.log(rows);
+    const selectStatement = `SELECT user_id from online_users WHERE user_id=?;`;
+    const selectStatementParams = [userID];
+    const [result] = await makeQueryToDB(
+      selectStatement,
+      selectStatementParams
+    );
+    console.log("select result = ", result);
+    if (result.length > 0) {
+      // update the info by userID
+      const updateStatement = `UPDATE online_users 
+      SET 
+        is_online = ?,
+        last_online = now(),
+        socket_id = ?,
+        is_connected_to_chat_server = ?
+      WHERE user_id = ?;`;
+      const updateStatementParams = [true, socketID, true, userID];
+      const [rows] = await makeQueryToDB(
+        updateStatement,
+        updateStatementParams
+      );
+      console.log("updated row = ", rows);
+    } else {
+      // insert the info
+      const sql = `INSERT INTO online_users (
+        id,
+        user_id,
+        is_online,
+        user_type,
+        last_online,
+        socket_id,
+        is_connected_to_chat_server
+      ) VALUES (DEFAULT, ?, ?, ?, NOW(), ?, ?);`;
+      const params = [userID, true, "freelancer", socketID, true];
+      const [rows] = await makeQueryToDB(sql, params);
+      console.log("insert result = ", rows);
+    }
   } catch (error) {
     console.log(error);
   }
 }
 
-async function deleteDisconnectedUserFromOnlineUsersTable(socktID) {
-  console.log(`user with socket.id = ${socktID} got disconnected!`);
-  // delete the disconnected user from the `online_users` table
+async function deleteDisconnectedUserFromOnlineUsersTable(socketID) {
+  console.log(`user with socket.id = ${socketID} got disconnected!`);
+  // delete the disconnected user from the `online_users` table by socketID
   try {
-    const sql = `DELETE from online_users WHERE socket_id=?`;
-    const params = [socktID];
+    const sql = `UPDATE online_users 
+    SET 
+    socket_id = ?,
+    is_connected_to_chat_server = ?
+    WHERE socket_id = ? `;
+    const params = [null, false, socketID];
     const [rows] = await makeQueryToDB(sql, params);
-    console.log(rows);
+    console.log("delete result", rows);
   } catch (error) {
     console.log(error);
   }
@@ -97,8 +128,8 @@ async function saveMessageInDataBase() {}
 
 io.on("connection", (socket) => {
   // when any newly connected user submits her userID do the following
-  socket.on("Submit User ID", async (userID) => {
-    insertConnectedUserToOnlineUsersTable(userID, socket.id);
+  socket.on("update-online-users-table", async (userID) => {
+    insertOrUpdateConnectedUserToOnlineUsersTable(userID, socket.id);
   });
 
   // whenever somebody gets diconnected then remove her from online_users table
